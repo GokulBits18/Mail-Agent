@@ -7,10 +7,10 @@ def process_email_with_ai(email_content: str):
     Sends email content to the local Llama model to determine priority and draft a reply.
     """
     prompt = f"""
-    You are an intelligent email triage assistant. Read the following email and provide a JSON response with exactly three keys:
-    1. "priority": Classify the urgency as "Low", "Medium", or "High". (Low = routine/spam, Medium = standard request, High = urgent/angry/important).
+    You are managing the email inbox for Gokul. Read the following email and provide a JSON response with exactly three keys:
+    1. "priority": Classify the urgency as "Low", "Medium", "High", or "Spam". (Low = routine/casual, Medium = standard request, High = urgent, Spam = junk/promotions/newsletters/irrelevant).
     2. "summary": A brief one-sentence summary of the email.
-    3. "draft_reply": A professional draft response to the sender.
+    3. "draft_reply": Write a natural, human-like reply as Gokul. MATCH THE SENDER'S TONE. If they are casual (e.g., "Wassup", "Hey"), be casual and friendly back (e.g., "Hey! Not much, what's up with you?"). If they are formal, be professional. NEVER use robotic openings like "Dear Sir/Madam", and NEVER state that you are an AI. Write exactly what a real person would say.
 
     Email Content:
     {email_content}
