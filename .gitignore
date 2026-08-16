@@ -1,0 +1,21 @@
+# Sensitive Credentials
+.env
+
+# Database Files
+emails.db
+*.db
+*.sqlite3
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Virtual Environments
+email/
+venv/
+env/
+.venv/
+
+# OS Generated Files (Optional)
+.DS_Store
+Thumbs.db
