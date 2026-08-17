@@ -3,28 +3,30 @@ import axios from 'axios';
 import { 
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer 
 } from 'recharts';
-import { Mail, RefreshCw, CheckCircle, AlertTriangle, Send, Edit3, Inbox, ShieldAlert } from 'lucide-react';
+import { RefreshCw, Send, Edit3, Inbox, ShieldAlert, Eye } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000';
 
 const PRIORITY_COLORS = {
-  High: '#EF4444',
-  Medium: '#F59E0B',
-  Low: '#10B981',
-  Spam: '#4B5563', // Added dark gray for Spam
+  High: '#fc0000',
+  Medium: '#ffff03',
+  Low: '#00ff33',
+  Spam: '#4B5563',
   Unassigned: '#6B7280'
 };
 
-const RAINBOW_COLORS = ['#ff0000', '#FFD700', '#40ff0b', '#00BFFF', '#9370DB'];
+const RAINBOW_COLORS = ['#FF4500', '#FFD700', '#1bff1b', '#41cfff', '#9370DB'];
 
 export default function App() {
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState(null);
+  
+  // NEW: Track whether we are 'reviewing' a draft or 'viewing' a sent message
+  const [modalMode, setModalMode] = useState('review'); 
+  
   const [editedReply, setEditedReply] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
-  
-  // NEW: State to track which tab is active
   const [viewTab, setViewTab] = useState('Inbox');
 
   const loadEmails = async () => {
@@ -54,7 +56,14 @@ export default function App() {
 
   const handleReview = (email) => {
     setSelectedEmail(email);
-    setEditedReply(email.draft_reply || '');
+    setModalMode('review');
+    setEditedReply(email.draft_reply_1 || '');
+  };
+
+  // NEW: Function to handle viewing an already sent email
+  const handleView = (email) => {
+    setSelectedEmail(email);
+    setModalMode('view');
   };
 
   const handleApprove = async () => {
@@ -95,10 +104,9 @@ export default function App() {
     count: senderCounts[sender]
   }));
 
-  // NEW: Filter emails based on the active tab
   const displayedEmails = emails.filter((email) => {
     if (viewTab === 'Spam') return email.priority === 'Spam';
-    return email.priority !== 'Spam'; // Inbox shows everything EXCEPT spam
+    return email.priority !== 'Spam';
   });
 
   return (
@@ -117,17 +125,10 @@ export default function App() {
           onClick={syncInbox}
           disabled={loading}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: '#0891B2',
-            color: '#FFF',
-            border: 'none',
-            padding: '10px 16px',
-            borderRadius: '8px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: '600',
-            boxShadow: '0 4px 6px -1px rgba(8, 145, 178, 0.4)'
+            display: 'flex', alignItems: 'center', gap: '8px',
+            backgroundColor: '#0891B2', color: '#FFF', border: 'none',
+            padding: '10px 16px', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer',
+            fontWeight: '600', boxShadow: '0 4px 6px -1px rgba(8, 145, 178, 0.4)'
           }}
         >
           <RefreshCw size={18} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
@@ -171,7 +172,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* NEW: Tab Navigation Buttons */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
         <button
           onClick={() => setViewTab('Inbox')}
@@ -179,8 +179,7 @@ export default function App() {
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '8px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', border: 'none',
             backgroundColor: viewTab === 'Inbox' ? '#0284C7' : '#FFF',
-            color: viewTab === 'Inbox' ? '#FFF' : '#475569',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+            color: viewTab === 'Inbox' ? '#FFF' : '#475569', boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
           }}
         >
           <Inbox size={16} /> Inbox
@@ -191,8 +190,7 @@ export default function App() {
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '8px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', border: 'none',
             backgroundColor: viewTab === 'Spam' ? '#4B5563' : '#FFF',
-            color: viewTab === 'Spam' ? '#FFF' : '#475569',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+            color: viewTab === 'Spam' ? '#FFF' : '#475569', boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
           }}
         >
           <ShieldAlert size={16} /> Spam
@@ -206,6 +204,7 @@ export default function App() {
               <th style={{ padding: '12px 16px', fontSize: '14px', color: '#0284C7', fontWeight: '600' }}>Sender</th>
               <th style={{ padding: '12px 16px', fontSize: '14px', color: '#0284C7', fontWeight: '600' }}>Subject</th>
               <th style={{ padding: '12px 16px', fontSize: '14px', color: '#0284C7', fontWeight: '600' }}>Priority</th>
+              <th style={{ padding: '12px 16px', fontSize: '14px', color: '#0284C7', fontWeight: '600' }}>Sentiment</th>
               <th style={{ padding: '12px 16px', fontSize: '14px', color: '#0284C7', fontWeight: '600' }}>Status</th>
               <th style={{ padding: '12px 16px', fontSize: '14px', color: '#0284C7', fontWeight: '600' }}>Actions</th>
             </tr>
@@ -213,7 +212,7 @@ export default function App() {
           <tbody>
             {displayedEmails.length === 0 ? (
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#9CA3AF' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#9CA3AF' }}>
                   No emails in this view.
                 </td>
               </tr>
@@ -226,12 +225,17 @@ export default function App() {
                     <span style={{
                       backgroundColor: `${PRIORITY_COLORS[email.priority] || '#6B7280'}20`,
                       color: PRIORITY_COLORS[email.priority] || '#6B7280',
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 'bold'
+                      padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold'
                     }}>
                       {email.priority}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span style={{
+                      backgroundColor: '#F1F5F9', color: '#475569',
+                      padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '600'
+                    }}>
+                      {email.sentiment || 'Neutral'}
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: '14px' }}>
@@ -243,6 +247,8 @@ export default function App() {
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
+                    
+                    {/* NEW: Conditional rendering for Actions */}
                     {email.status === 'Pending' && email.priority !== 'Spam' ? (
                       <button
                         onClick={() => handleReview(email)}
@@ -254,11 +260,21 @@ export default function App() {
                       >
                         <Edit3 size={14} /> Review & Approve
                       </button>
+                    ) : email.status === 'Auto-Sent' || email.status === 'Approved & Sent' ? (
+                      <button
+                        onClick={() => handleView(email)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          backgroundColor: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1',
+                          padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
+                        }}
+                      >
+                        <Eye size={14} /> View Reply
+                      </button>
                     ) : (
-                      <span style={{ color: '#94A3B8', fontSize: '13px' }}>
-                        {email.priority === 'Spam' ? 'Ignored' : 'Completed'}
-                      </span>
+                      <span style={{ color: '#94A3B8', fontSize: '13px' }}>Ignored</span>
                     )}
+
                   </td>
                 </tr>
               ))
@@ -267,6 +283,7 @@ export default function App() {
         </table>
       </div>
 
+      {/* NEW: The dynamic Modal */}
       {selectedEmail && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -277,7 +294,7 @@ export default function App() {
             padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)'
           }}>
             <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', color: '#0F172A' }}>
-              Review Draft: {selectedEmail.subject}
+              {modalMode === 'review' ? `Review Draft: ${selectedEmail.subject}` : `Thread: ${selectedEmail.subject}`}
             </h2>
             
             <div style={{ 
@@ -290,38 +307,81 @@ export default function App() {
               </p>
             </div>
 
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '6px', color: '#0F172A' }}>
-              AI-Generated Draft Response (Edit if needed):
-            </label>
-            <textarea
-              rows="6"
-              value={editedReply}
-              onChange={(e) => setEditedReply(e.target.value)}
-              style={{
-                width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1',
-                fontFamily: 'inherit', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#F8FAFC'
-              }}
-            />
+            {/* If we are VIEWING a sent message */}
+            {modalMode === 'view' && (
+              <div style={{ 
+                marginBottom: '16px', padding: '12px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0',
+                borderRadius: '8px', fontSize: '13px', maxHeight: '150px', overflowY: 'auto' 
+              }}>
+                <strong style={{ color: '#065F46' }}>Sent Reply ({selectedEmail.status}):</strong>
+                <p style={{ margin: '6px 0 0 0', color: '#064E3B', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {selectedEmail.final_reply || "No reply body recorded."}
+                </p>
+              </div>
+            )}
+
+            {/* If we are REVIEWING a pending message */}
+            {modalMode === 'review' && (
+              <>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#0F172A' }}>
+                  Select a Smart Reply:
+                </label>
+                
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                  <button
+                    onClick={() => setEditedReply(selectedEmail.draft_reply_1)}
+                    style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                     Positive / Accept
+                  </button>
+                  <button
+                    onClick={() => setEditedReply(selectedEmail.draft_reply_2)}
+                    style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', backgroundColor: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                     Polite Decline
+                  </button>
+                  <button
+                    onClick={() => setEditedReply(selectedEmail.draft_reply_3)}
+                    style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px', backgroundColor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                     Ask for Details
+                  </button>
+                </div>
+
+                <textarea
+                  rows="6"
+                  value={editedReply}
+                  onChange={(e) => setEditedReply(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1',
+                    fontFamily: 'inherit', fontSize: '14px', boxSizing: 'border-box', backgroundColor: '#F8FAFC'
+                  }}
+                />
+              </>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
               <button
                 onClick={() => setSelectedEmail(null)}
                 style={{ padding: '8px 16px', border: '1px solid #CBD5E1', color: '#475569', backgroundColor: '#FFF', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}
               >
-                Cancel
+                {modalMode === 'view' ? 'Close' : 'Cancel'}
               </button>
-              <button
-                onClick={handleApprove}
-                disabled={actionLoading}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  backgroundColor: '#0891B2', color: '#FFF', border: 'none',
-                  padding: '8px 16px', borderRadius: '6px', cursor: actionLoading ? 'not-allowed' : 'pointer', fontWeight: '500'
-                }}
-              >
-                <Send size={14} />
-                {actionLoading ? 'Sending...' : 'Approve & Send'}
-              </button>
+              
+              {modalMode === 'review' && (
+                <button
+                  onClick={handleApprove}
+                  disabled={actionLoading}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    backgroundColor: '#0891B2', color: '#FFF', border: 'none',
+                    padding: '8px 16px', borderRadius: '6px', cursor: actionLoading ? 'not-allowed' : 'pointer', fontWeight: '500'
+                  }}
+                >
+                  <Send size={14} />
+                  {actionLoading ? 'Sending...' : 'Approve & Send'}
+                </button>
+              )}
             </div>
           </div>
         </div>

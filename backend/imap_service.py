@@ -13,10 +13,9 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 IMAP_SERVER = "imap.gmail.com"
 
 def decode_field(field_value):
-    """Helper to cleanly decode email headers (Subject, From) that use UTF-8 or base64."""
     if not field_value:
         return "Unknown"
-    decoded_parts = decode_header(field_value)
+    decoded_parts = decode_header(field_value) 
     result = ""
     for part, encoding in decoded_parts:
         if isinstance(part, bytes):
@@ -26,7 +25,6 @@ def decode_field(field_value):
     return result
 
 def get_email_body(msg):
-    """Aggressively extracts plain text and obliterates HTML, CSS, and Scripts."""
     body = ""
     is_html = False
 
@@ -40,7 +38,7 @@ def get_email_body(msg):
                 
             if content_type == "text/plain":
                 body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                break  # Clean text found, stop looking
+                break 
             elif content_type == "text/html" and not body:
                 body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
                 is_html = True
@@ -49,18 +47,12 @@ def get_email_body(msg):
         if msg.get_content_type() == "text/html":
             is_html = True
             
-    # If HTML was found, completely sanitize it
     if is_html or "<html" in body.lower() or "<style" in body.lower():
-        # 1. Destroy <style>...</style> blocks (CSS)
         body = re.sub(r'<style[^>]*>.*?</style>', ' ', body, flags=re.IGNORECASE | re.DOTALL)
-        # 2. Destroy <script>...</script> blocks (Javascript)
         body = re.sub(r'<script[^>]*>.*?</script>', ' ', body, flags=re.IGNORECASE | re.DOTALL)
-        # 3. Strip all remaining HTML tags
         body = re.sub(r'<[^>]+>', ' ', body)
-        # 4. Convert HTML entities (like &nbsp; or &amp;) into normal characters
         body = html.unescape(body)
             
-    # Clean up excessive blank lines and spaces
     return re.sub(r'\s+', ' ', body).strip()
 
 def fetch_unread_emails():
@@ -69,16 +61,13 @@ def fetch_unread_emails():
         mail.login(EMAIL_ACCOUNT, EMAIL_PASSWORD)
         mail.select("inbox")
 
-        # CHANGED BACK: Only look for new, unread emails so we don't get duplicates
-        status, messages = mail.search(None, "UNSEEN")
+        status, messages = mail.search(None, "ALL")
         
         if not messages[0]:
             return {"status": "success", "fetched": 0}
             
         email_ids = messages[0].split()
-        
-        # CHANGED BACK: Process only the 5 most recent to prevent AI traffic jams
-        email_ids = email_ids[-5:]
+        email_ids = email_ids[-10:]
         
         fetched_count = 0
         db = SessionLocal()
@@ -93,15 +82,19 @@ def fetch_unread_emails():
                     sender = decode_field(msg.get("From"))
                     body = get_email_body(msg)
 
-                    new_email = EmailRecord(
-                        sender=sender,
-                        subject=subject,
-                        content=body,
-                        status="Pending"
-                    )
-                    db.add(new_email)
-                    db.commit()
-                    fetched_count += 1
+                    existing_email = db.query(EmailRecord).filter_by(subject=subject, sender=sender).first()
+                    
+                    if not existing_email:
+                        new_email = EmailRecord(
+                            sender=sender,
+                            subject=subject,
+                            content=body,
+                            priority="Unassigned", 
+                            status="Pending"
+                        )
+                        db.add(new_email)
+                        db.commit()
+                        fetched_count += 1
         
         db.close()
         mail.logout()
