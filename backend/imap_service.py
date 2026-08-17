@@ -69,11 +69,16 @@ def fetch_unread_emails():
         mail.login(EMAIL_ACCOUNT, EMAIL_PASSWORD)
         mail.select("inbox")
 
-        status, messages = mail.search(None, "ALL")
+        # CHANGED BACK: Only look for new, unread emails so we don't get duplicates
+        status, messages = mail.search(None, "UNSEEN")
+        
+        if not messages[0]:
+            return {"status": "success", "fetched": 0}
+            
         email_ids = messages[0].split()
         
-        # Process recent batch
-        email_ids = email_ids[-15:]
+        # CHANGED BACK: Process only the 5 most recent to prevent AI traffic jams
+        email_ids = email_ids[-5:]
         
         fetched_count = 0
         db = SessionLocal()
