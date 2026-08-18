@@ -8,8 +8,6 @@ from ai_service import process_email_with_ai
 
 app = FastAPI(title="Email Triage API")
 
-# Add CORS so the React frontend can communicate with this API
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -30,38 +28,51 @@ def get_emails(db: Session = Depends(get_db)):
     emails = db.query(EmailRecord).order_by(EmailRecord.id.desc()).all()
     return {"status": "success", "data": emails}
 
-#  THE MASTER PIPELINE 
-
 @app.get("/api/process-emails")
 def process_inbox(db: Session = Depends(get_db)):
-    # 1. Fetch unread emails
     fetch_result = fetch_unread_emails()
     if fetch_result.get("status") == "error":
         return fetch_result
         
-    #  Query all emails that haven't been analyzed by AI yet
+    #  DATABASE REFRESH 
     
+    db.commit()
+    db.expire_all()
+        
     unprocessed_emails = db.query(EmailRecord).filter(
         (EmailRecord.priority == "Unassigned") | (EmailRecord.priority.is_(None))
     ).all()
     
     processed_count = 0
     for email in unprocessed_emails:
-
-        #  Pass content to the local AI model (Qwen)
-
         ai_raw = process_email_with_ai(email.content)
         
-        ai_result = {k.lower(): v for k, v in ai_raw.items()}
+        # Lowercase the keys just in case Qwen capitalizes them
+
+        ai_result = {str(k).lower(): v for k, v in ai_raw.items()}
         
-        email.priority = ai_result.get("priority", "Unassigned")
-        email.sentiment = ai_result.get("sentiment", "Neutral")
+        raw_priority = ai_result.get("priority", "Medium")
+        valid_priorities = ["Low", "Medium", "High", "Spam"]
+        
+        # Capitalize the result (e.g., "low" -> "Low") to guarantee a match
+
+        raw_priority = str(raw_priority).capitalize()
+        
+        # If Qwen hallucinates a category, force it to Medium
+
+        if raw_priority not in valid_priorities:
+            raw_priority = "Medium"
+            
+        email.priority = raw_priority
+        
+        # Capitalize sentiment for a clean UI
+        
+        email.sentiment = str(ai_result.get("sentiment", "Neutral")).capitalize()
+        
         email.draft_reply_1 = ai_result.get("draft_reply_1", "")
         email.draft_reply_2 = ai_result.get("draft_reply_2", "")
         email.draft_reply_3 = ai_result.get("draft_reply_3", "")
         
-        #  Routing Decision based on priority
-
         if email.priority == "Low":
             send_result = send_email(
                 to_address=email.sender, 
@@ -76,8 +87,6 @@ def process_inbox(db: Session = Depends(get_db)):
         else:
             email.status = "Pending"
             
-        # Save changes to the database
-
         db.commit()
         processed_count += 1
         
@@ -86,8 +95,6 @@ def process_inbox(db: Session = Depends(get_db)):
         "fetched": fetch_result.get("fetched", 0), 
         "processed_by_ai": processed_count
     }
-
-# HUMAN IN THE LOOP APPROVAL 
 
 @app.post("/api/emails/{email_id}/approve")
 async def approve_email(email_id: int, request: Request, db: Session = Depends(get_db)):
